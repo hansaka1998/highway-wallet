@@ -1,0 +1,29 @@
+type User @table {
+  name: String!
+  phoneNumber: String!
+  email: String!
+  createdAt: Timestamp!
+  address: String
+}
+
+type Wallet @table {
+  user: User!
+  balance: Float!
+  updatedAt: Timestamp!
+}
+
+type Transaction @table {
+  user: User!
+  type: String!
+  amount: Float!
+  timestamp: Timestamp!
+  description: String
+}
+
+type MicroCredit @table {
+  user: User!
+  borrowedAmount: Float!
+  borrowedAt: Timestamp!
+  isRepaid: Boolean!
+  repaidAt: Timestamp
+}

@@ -1,0 +1,70 @@
+mutation SeedDatabase @transaction @auth(level: NO_ACCESS) {
+  user_insertMany(data: [
+    {
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      name: "demouser1",
+      email: "demouser1@example.com",
+      phoneNumber: "123-456-7890",
+      address: "123 Main St",
+      createdAt: "2024-01-01T00:00:00Z"
+    },
+    {
+      id: "550e8400-e29b-41d4-a716-446655440001",
+      name: "demouser2",
+      email: "demouser2@example.com",
+      phoneNumber: "987-654-3210",
+      address: "456 Elm St",
+      createdAt: "2024-01-02T00:00:00Z"
+    }
+  ])
+  wallet_insertMany(data: [
+    {
+      id: "650e8400-e29b-41d4-a716-446655440002",
+      userId: "550e8400-e29b-41d4-a716-446655440000",
+      balance: 100.00,
+      updatedAt: "2024-01-01T00:00:00Z"
+    },
+    {
+      id: "650e8400-e29b-41d4-a716-446655440003",
+      userId: "550e8400-e29b-41d4-a716-446655440001",
+      balance: 50.00,
+      updatedAt: "2024-01-02T00:00:00Z"
+    }
+  ])
+  transaction_insertMany(data: [
+    {
+      id: "750e8400-e29b-41d4-a716-446655440004",
+      userId: "550e8400-e29b-41d4-a716-446655440000",
+      amount: 25.00,
+      description: "Initial deposit",
+      timestamp: "2024-01-01T00:00:00Z",
+      type: "deposit"
+    },
+    {
+      id: "750e8400-e29b-41d4-a716-446655440005",
+      userId: "550e8400-e29b-41d4-a716-446655440001",
+      amount: 10.00,
+      description: "Withdrawal",
+      timestamp: "2024-01-02T00:00:00Z",
+      type: "withdrawal"
+    }
+  ])
+  microCredit_insertMany(data: [
+    {
+      id: "850e8400-e29b-41d4-a716-446655440006",
+      userId: "550e8400-e29b-41d4-a716-446655440000",
+      borrowedAmount: 10.00,
+      borrowedAt: "2024-01-03T00:00:00Z",
+      isRepaid: false,
+      repaidAt: null
+    },
+    {
+      id: "850e8400-e29b-41d4-a716-446655440007",
+      userId: "550e8400-e29b-41d4-a716-446655440001",
+      borrowedAmount: 5.00,
+      borrowedAt: "2024-01-04T00:00:00Z",
+      isRepaid: true,
+      repaidAt: "2024-01-05T00:00:00Z"
+    }
+  ])
+}

@@ -1,0 +1,34 @@
+mutation CreateNewUser($email: String!, $name: String!, $phoneNumber: String!) @auth(level: USER) {
+  user_insert(data: {
+    email: $email,
+    name: $name,
+    phoneNumber: $phoneNumber,
+    createdAt_expr: "request.time"
+  })
+}
+
+query GetMyWallet @auth(level: USER) {
+  wallets(where: {userId: {eq_expr: "auth.uid"}}) {
+    id
+    balance
+    updatedAt
+  }
+}
+
+mutation AddTransaction($amount: Float!, $description: String, $type: String!) @auth(level: USER) {
+  transaction_insert(data: {
+    userId_expr: "auth.uid",
+    amount: $amount,
+    description: $description,
+    timestamp_expr: "request.time",
+    type: $type
+  })
+}
+
+query ListAllUsers @auth(level: USER, insecureReason: "This operation is safe to expose to all logged in users.") {
+  users {
+    id
+    name
+    email
+  }
+}

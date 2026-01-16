@@ -1,21 +1,43 @@
-import "../global.css";
 import { Stack } from "expo-router";
-import { StatusBar } from "expo-status-bar";
-import { SafeAreaProvider } from "react-native-safe-area-context";
-import { View } from "react-native";
+import { onAuthStateChanged, User } from "firebase/auth";
+import { useEffect, useState } from "react";
+import LoginScreen from "../components/LoginScreen";
+import SplashScreen from "../components/SplashScreen";
+import { TransactionProvider } from "../contexts/TransactionContext";
+import { WalletProvider } from "../contexts/WalletContext";
+import { auth } from "../firebaseConfig";
+import "../global.css";
 
 export default function RootLayout() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+      setIsLoading(false);
+    });
+
+    return unsubscribe;
+  }, []);
+
+  const handleSplashFinish = () => {
+    setIsLoading(false);
+  };
+
+  if (isLoading) {
+    return <SplashScreen onFinish={handleSplashFinish} />;
+  }
+
+  if (!user) {
+    return <LoginScreen />;
+  }
+
   return (
-    <View style={{ flex: 1, backgroundColor: "#f1faee" }}>
-      <SafeAreaProvider style={{ flex: 1, backgroundColor: "#f1faee" }}>
-        <StatusBar backgroundColor="#f1faee" style="dark" />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: "#f1faee" },
-          }}
-        />
-      </SafeAreaProvider>
-    </View>
+    <WalletProvider>
+      <TransactionProvider>
+        <Stack />
+      </TransactionProvider>
+    </WalletProvider>
   );
 }

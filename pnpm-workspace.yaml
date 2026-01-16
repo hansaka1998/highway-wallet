@@ -1,0 +1,4 @@
+nodeLinker: hoisted
+
+overrides:
+  '@dataconnect/generated': link:src/dataconnect-generated
