@@ -1,7 +1,9 @@
 import { View, Text, TouchableOpacity, ScrollView } from "react-native";
+import { Redirect } from "expo-router";
 
 export default function Index() {
   const balance = 1500; // sample data
+  return <Redirect href="/welcome" />;
 
   return (
     <ScrollView
