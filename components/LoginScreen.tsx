@@ -1,28 +1,34 @@
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import React, { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from 'react-native';
-import { auth } from '../firebaseConfig';
+import { LinearGradient } from "expo-linear-gradient";
+import { Link } from "expo-router";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import React, { useState } from "react";
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+import { auth } from "../firebaseConfig";
+import { FormField } from "./FormField";
 
-const LoginScreen = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+export default function LoginScreen() {
+  const [formData, setFormData] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   const handleLogin = async () => {
+    const { email, password } = formData;
     if (!email || !password) {
-      Alert.alert("Error", "Please fill in all fields");
+      Alert.alert("Error", "Please enter both email and password.");
       return;
     }
 
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // Success - navigation will be handled by auth state
-      router.replace('/'); // Navigate to dashboard
+      // navigation layout එක මගින් සිදු කරයි
     } catch (error: any) {
       Alert.alert("Login Failed", error.message);
     } finally {
@@ -32,84 +38,60 @@ const LoginScreen = () => {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
       className="flex-1 bg-[#0b0b0f]"
     >
-      <View className="flex-1 px-8 justify-center">
-
-        {/* Brand/Logo Area */}
-        <View className="items-center mb-12">
-          <View className="bg-[#FF3B30] w-20 h-20 rounded-3xl items-center justify-center rotate-12 shadow-2xl shadow-red-500/50">
-            <MaterialCommunityIcons name="road-variant" size={50} color="white" className="-rotate-12" />
-          </View>
-          <Text className="text-white text-3xl font-black tracking-[5px] mt-6 uppercase">HiWayPay</Text>
-          <Text className="text-white/40 text-xs tracking-widest mt-2 uppercase font-bold">Expressway Digital Wallet</Text>
+      <ScrollView contentContainerClassName="flex-grow justify-center px-8 py-10">
+        <View className="mb-10 items-center">
+          <Text className="text-3xl font-black uppercase tracking-[4px] text-white">
+            Welcome Back
+          </Text>
+          <Text className="mt-2 text-center text-xs font-bold uppercase tracking-widest text-white/40">
+            Login to access your HiWayPay wallet
+          </Text>
         </View>
 
-        {/* Input Fields */}
         <View className="space-y-4">
-          <View className="bg-white/5 border border-white/10 rounded-2xl flex-row items-center px-4 h-16">
-            <Ionicons name="mail-outline" size={20} color="#FF3B30" />
-            <TextInput
-              placeholder="Email Address"
-              placeholderTextColor="rgba(255,255,255,0.3)"
-              className="flex-1 ml-4 text-white font-medium"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-            />
-          </View>
-
-          <View className="bg-white/5 border border-white/10 rounded-2xl flex-row items-center px-4 h-16 mt-4">
-            <Ionicons name="lock-closed-outline" size={20} color="#FF3B30" />
-            <TextInput
-              placeholder="Password"
-              placeholderTextColor="rgba(255,255,255,0.3)"
-              className="flex-1 ml-4 text-white font-medium"
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-            />
-          </View>
+          <FormField
+            icon="mail-outline"
+            placeholder="Email Address"
+            value={formData.email}
+            onChangeText={(t) => setFormData({ ...formData, email: t })}
+            autoCapitalize="none"
+          />
+          <FormField
+            icon="lock-closed-outline"
+            placeholder="Password"
+            secureTextEntry
+            value={formData.password}
+            onChangeText={(t) => setFormData({ ...formData, password: t })}
+          />
         </View>
 
-        {/* Forgot Password */}
-        <Pressable className="mt-4 self-end">
-          <Text className="text-[#FF3B30] text-xs font-bold uppercase tracking-widest">Forgot Password?</Text>
-        </Pressable>
-
-        {/* Login Button */}
         <Pressable
           onPress={handleLogin}
-          className="mt-10 overflow-hidden rounded-full h-16"
+          className="mt-10 h-16 overflow-hidden rounded-full"
           disabled={loading}
         >
           <LinearGradient
-            colors={['#FF5F54', '#FF3B30']}
-            className="flex-1 items-center justify-center flex-row"
+            colors={["#FF5F54", "#FF3B30"]}
+            className="flex-1 items-center justify-center"
           >
-            {loading ? (
-               <Text className="text-white font-black tracking-[4px] uppercase text-sm">Processing...</Text>
-            ) : (
-              <>
-                <Text className="text-white font-black tracking-[4px] uppercase text-sm">Secure Login</Text>
-                <Ionicons name="arrow-forward" size={18} color="white" className="ml-2" />
-              </>
-            )}
+            <Text className="text-sm font-black uppercase tracking-[4px] text-white">
+              {loading ? "Logging In..." : "Login"}
+            </Text>
           </LinearGradient>
         </Pressable>
 
-        {/* Sign Up Footer */}
-        <View className="flex-row justify-center mt-10">
-          <Text className="text-white/40 text-xs uppercase font-bold tracking-widest">New User?</Text>
-          <Pressable onPress={() => router.push('/signup')}>
-            <Text className="text-white text-xs uppercase font-black tracking-widest ml-2">Create Account</Text>
+        <Link href="/signup" asChild>
+          <Pressable className="mt-8 self-center">
+            <Text className="text-xs font-bold uppercase tracking-widest text-white/40">
+              Don&apos;t have an account?{" "}
+              <Text className="font-black text-white">Create One</Text>
+            </Text>
           </Pressable>
-        </View>
-
-      </View>
+        </Link>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
-};
-
-export default LoginScreen;
+}

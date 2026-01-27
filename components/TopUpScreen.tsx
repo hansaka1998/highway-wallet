@@ -1,206 +1,319 @@
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { useTransactions } from '../contexts/TransactionContext';
-import { useWallet } from '../contexts/WalletContext';
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
+import {
+  addDoc,
+  collection,
+  doc,
+  increment,
+  serverTimestamp,
+  updateDoc,
+} from "firebase/firestore";
+import React, { useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { useWallet } from "../contexts/WalletContext";
+import { auth, db } from "../firebaseConfig";
 
-// Reusable component for the Quick Top Up buttons
-const AmountButton = ({ amount, selected, onPress }: any) => (
-  <Pressable
-    onPress={onPress}
-    className={`w-[48%] h-16 rounded-3xl items-center justify-center mb-4 border ${selected ? 'border-red-500 bg-white/10' : 'border-white/10 bg-white/5'}`}
-  >
-    <Text className="text-white font-bold text-base">RS. {amount}</Text>
+// Amount Card Component
+const AmountCard = ({ amount, selected, onPress, icon }: any) => (
+  <Pressable onPress={onPress} className="mb-4 w-[48%]">
+    {selected ? (
+      <LinearGradient
+        colors={["#FF5F54", "#FF3B30"]}
+        className="h-40 items-center justify-center rounded-[35px] p-6 shadow-lg shadow-red-500/50"
+      >
+        <MaterialCommunityIcons name={icon} size={32} color="white" />
+        <Text className="mt-2 text-center text-lg font-black uppercase text-white">
+          RS. {amount}
+        </Text>
+        <Text className="text-[10px] font-bold uppercase tracking-tighter text-white/70">
+          Selected
+        </Text>
+      </LinearGradient>
+    ) : (
+      <LinearGradient
+        colors={["#FF4133", "#7A003C", "#FF4133"]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        className="h-40 rounded-[35px] p-[2px]"
+      >
+        <View className="flex-1 items-center justify-center rounded-[33px] bg-[#0F0F12] p-4">
+          <MaterialCommunityIcons name={icon} size={32} color="#FF3B30" />
+          <Text className="mt-2 text-center text-lg font-black uppercase text-white">
+            RS. {amount}
+          </Text>
+          <Text className="text-[10px] font-bold uppercase tracking-tighter text-white/30">
+            Quick Pay
+          </Text>
+        </View>
+      </LinearGradient>
+    )}
   </Pressable>
 );
 
-// Reusable component for Payment Methods
-const PaymentMethod = ({ title, sub, icon, iconType = "MaterialCommunityIcons", onPress }: any) => (
-  <LinearGradient
-    colors={["#FF4133", "#7A003C", "#FF4133"]}
-    start={{ x: 0, y: 0.5 }}
-    end={{ x: 1, y: 0.5 }}
-    className="rounded-[30px] p-[1.5px] mb-4"
-  >
-    <Pressable onPress={onPress} className="bg-[#0F0F12] rounded-[28px] flex-row items-center px-6 py-4">
-      <View className="bg-white/5 h-12 w-12 rounded-full items-center justify-center mr-4">
-        {iconType === "MaterialCommunityIcons" ? (
-          <MaterialCommunityIcons name={icon} size={24} color="#FF3B30" />
-        ) : (
-          <Ionicons name={icon} size={24} color="#FF3B30" />
-        )}
-      </View>
-      <View className="flex-1">
-        <Text className="text-white font-bold text-sm uppercase tracking-wider">{title}</Text>
-        <Text className="text-white/50 text-[10px] mt-0.5">{sub}</Text>
-      </View>
-    </Pressable>
-  </LinearGradient>
-);
-
 const TopUpScreen = () => {
-  const [selectedAmount, setSelectedAmount] = useState('0');
-  const [customAmount, setCustomAmount] = useState('');
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
+  const [selectedAmount, setSelectedAmount] = useState("500");
+  const [customAmount, setCustomAmount] = useState("");
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const { balance, addAmount } = useWallet();
-  const { addTransaction } = useTransactions();
+  const { balance, creditActive, creditAmount } = useWallet();
 
-  const handleProceedToPayment = async () => {
-    const amount = selectedAmount === 'Custom Amount' ? parseFloat(customAmount.replace(/,/g, '')) : parseFloat(selectedAmount.replace(/,/g, ''));
+  const handleTopUp = async () => {
+    // ගාණ තෝරාගැනීම
+    const amountStr =
+      selectedAmount === "Custom" ? customAmount : selectedAmount;
+    const finalAmount = parseFloat(amountStr);
 
-    if (!amount || amount <= 0) {
-      Alert.alert('Invalid Amount', 'Please select or enter a valid amount');
+    if (!finalAmount || isNaN(finalAmount) || finalAmount <= 0) {
+      Alert.alert("Error", "කරුණාකර වලංගු මුදලක් ඇතුළත් කරන්න.");
       return;
     }
 
-    if (!selectedPaymentMethod) {
-      Alert.alert('Payment Method Required', 'Please select a payment method');
-      return;
-    }
-
+    setLoading(true);
     try {
-      // Show processing alert
-      Alert.alert('Processing Payment', `Processing RS. ${amount.toFixed(2)} via ${selectedPaymentMethod}...`);
+      const user = auth.currentUser;
+      if (!user) throw new Error("Please login first");
 
-      // Update wallet balance in Firebase
-      const userId = 'demo-user'; // In real app, get from auth
-      await updateDoc(doc(db, "users", userId), {
-        walletBalance: increment(amount)
+      const userRef = doc(db, "users", user.uid);
+
+      // Calculate how much goes to credit repayment vs balance
+      let amountToCredit = 0;
+      let amountToBalance = finalAmount;
+      let newCreditAmount = creditAmount || 0;
+      let newCreditActive = creditActive;
+
+      if (creditAmount > 0) {
+        if (finalAmount >= creditAmount) {
+          // Top-up is enough to pay off all debt
+          amountToCredit = creditAmount;
+          amountToBalance = finalAmount - creditAmount;
+          newCreditAmount = 0;
+          newCreditActive = false;
+        } else {
+          // Top-up only partially pays debt
+          amountToCredit = finalAmount;
+          amountToBalance = 0;
+          newCreditAmount = creditAmount - finalAmount;
+          newCreditActive = true;
+        }
+      }
+
+      // 1. Update Firestore balance and credit
+      await updateDoc(userRef, {
+        balance: increment(amountToBalance),
+        creditAmount: newCreditAmount,
+        creditActive: newCreditActive,
+        updatedAt: serverTimestamp(),
       });
 
-      // Update local wallet balance
-      addAmount(amount);
+      // 2. Record credit repayment transaction if applicable
+      if (amountToCredit > 0) {
+        await addDoc(collection(db, "transactions"), {
+          userId: user.uid,
+          amount: amountToCredit,
+          type: "CREDIT_REPAYMENT",
+          description: "Credit Repayment",
+          timestamp: serverTimestamp(),
+          status: "SUCCESS",
+        });
+      }
 
-      // Add transaction to history
-      addTransaction({
-        type: 'topup',
-        amount: amount,
-        description: `Top-up via ${selectedPaymentMethod}`,
+      // 3. Record top-up transaction for amount added to balance
+      if (amountToBalance > 0) {
+        await addDoc(collection(db, "transactions"), {
+          userId: user.uid,
+          amount: amountToBalance,
+          type: "TOPUP",
+          description: "Wallet Recharge",
+          timestamp: serverTimestamp(),
+          status: "SUCCESS",
+        });
+      }
+
+      // 4. Add notification
+      let notificationBody = "";
+      if (amountToCredit > 0 && amountToBalance > 0) {
+        notificationBody = `රු. ${amountToCredit.toFixed(2)} ණය ආපසු ගෙවා රු. ${amountToBalance.toFixed(2)} ගිණුමට එකතු විය.`;
+      } else if (amountToCredit > 0) {
+        notificationBody = `රු. ${amountToCredit.toFixed(2)} ණය ආපසු ගෙවා ඇත. ඉතිරි ණය: රු. ${newCreditAmount.toFixed(2)}`;
+      } else {
+        notificationBody = `රු. ${finalAmount.toFixed(2)} සාර්ථකව ඔබේ ගිණුමට එකතු විය.`;
+      }
+
+      await addDoc(collection(db, "notifications"), {
+        userId: user.uid,
+        title: "Recharge Successful",
+        body: notificationBody,
+        type: "payment",
+        read: false,
+        createdAt: serverTimestamp(),
       });
 
-      // Add transaction to Firebase
-      await addDoc(collection(db, "transactions"), {
-        userId: userId,
-        type: 'topup',
-        amount: amount,
-        description: `Top-up via ${selectedPaymentMethod}`,
-        paymentMethod: selectedPaymentMethod,
-        transactionId: `txn_${Date.now()}`,
-        timestamp: new Date(),
-      });
+      // Success message
+      let successMessage = "";
+      if (amountToCredit > 0 && amountToBalance > 0) {
+        successMessage = `RS ${amountToCredit.toFixed(2)} paid towards credit.\nRS ${amountToBalance.toFixed(2)} added to wallet.\nCredit fully paid!`;
+      } else if (amountToCredit > 0) {
+        successMessage = `RS ${amountToCredit.toFixed(2)} paid towards credit.\nRemaining credit: RS ${newCreditAmount.toFixed(2)}`;
+      } else {
+        successMessage = `RS ${finalAmount.toFixed(2)} added to your wallet!`;
+      }
 
-      Alert.alert(
-        'Payment Successful!',
-        `RS. ${amount.toFixed(2)} has been added to your wallet.`,
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
-    } catch (error) {
-      console.error('Payment error:', error);
-      Alert.alert('Payment Error', 'An error occurred while processing your payment. Please try again.');
+      Alert.alert("Success", successMessage, [
+        { text: "Done", onPress: () => router.replace("/") },
+      ]);
+    } catch (error: any) {
+      console.error(error);
+      Alert.alert("Failed", "ගනුදෙනුව අසාර්ථකයි. කරුණාකර නැවත උත්සාහ කරන්න.");
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const handlePaymentMethodSelect = (method: string) => {
-    setSelectedPaymentMethod(method);
   };
 
   return (
     <View className="flex-1 bg-[#0b0b0f]">
       {/* Header */}
-      <View className="pt-14 px-6 flex-row items-center">
-        <Pressable className="mr-4" onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={28} color="white" />
+      <View className="flex-row items-center justify-between px-6 pt-14">
+        <Pressable
+          onPress={() => router.replace("/")}
+          className="h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/5"
+        >
+          <Ionicons name="arrow-back" size={24} color="white" />
         </Pressable>
-        <Text className="text-white font-bold text-xl tracking-widest uppercase flex-1 text-center mr-8">Top Up Wallet</Text>
+        <Text className="text-lg font-black uppercase tracking-widest text-white">
+          Top Up Wallet
+        </Text>
+        <View className="w-12" />
       </View>
 
       <ScrollView contentContainerClassName="px-6 pt-8 pb-32">
-        {/* Current Balance Card */}
-        <LinearGradient
-          colors={["#FF4133", "#7A003C", "#FF4133"]}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          className="rounded-[35px] p-[2px] mb-10"
-        >
-          <View className="bg-[#0F0F12] rounded-[33px] p-8 items-center">
-            <View className="flex-row items-center mb-2">
-              <MaterialCommunityIcons name="wallet-outline" size={18} color="#FF3B30" />
-              <Text className="text-white/60 font-bold ml-2 text-xs uppercase tracking-[2px]">Current Balance</Text>
-            </View>
-            <Text className="text-white text-4xl font-black">LKR {balance.toFixed(2)}</Text>
+        {/* Available Balance Card */}
+        <View className="mb-8 flex-row items-center justify-between rounded-[30px] border border-white/10 bg-white/5 p-6">
+          <View>
+            <Text className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+              Current Balance
+            </Text>
+            <Text className="mt-1 text-2xl font-black text-white">
+              RS {Number(balance ?? 0).toFixed(2)}
+            </Text>
           </View>
-        </LinearGradient>
-
-        {/* Quick Top Up Section */}
-        <Text className="text-white font-bold tracking-[3px] mb-6 text-sm uppercase">Quick Top Up</Text>
-        <View className="flex-row flex-wrap justify-between">
-          {['500', '1,000', '2,000', '5,000'].map((amt) => (
-            <AmountButton
-              key={amt}
-              amount={amt}
-              selected={selectedAmount === amt}
-              onPress={() => {
-                setSelectedAmount(amt);
-                setCustomAmount('');
-              }}
+          <View className="h-12 w-12 items-center justify-center rounded-full bg-[#FF3B30]/10">
+            <MaterialCommunityIcons
+              name="wallet-outline"
+              size={24}
+              color="#FF3B30"
             />
-          ))}
+          </View>
         </View>
 
-        {/* Custom Amount Button */}
-        <Pressable
-          onPress={() => setSelectedAmount('Custom Amount')}
-          className={`w-full h-16 rounded-full flex-row items-center justify-center mb-10 border ${selectedAmount === 'Custom Amount' ? 'border-red-500 bg-white/10' : 'border-white/10 bg-white/5'}`}
-        >
-          <MaterialCommunityIcons name="cash-plus" size={20} color="#FF3B30" className="mr-2" />
-          <Text className="text-white/70 font-bold tracking-widest uppercase text-xs mr-4">Custom Amount</Text>
-          {selectedAmount === 'Custom Amount' && (
+        <Text className="mb-6 text-xs font-bold uppercase tracking-[3px] text-white/40">
+          Select Amount
+        </Text>
+
+        {/* Amount Grid */}
+        <View className="flex-row flex-wrap justify-between">
+          <AmountCard
+            amount="500"
+            icon="cash-multiple"
+            selected={selectedAmount === "500"}
+            onPress={() => setSelectedAmount("500")}
+          />
+          <AmountCard
+            amount="1000"
+            icon="currency-usd"
+            selected={selectedAmount === "1000"}
+            onPress={() => setSelectedAmount("1000")}
+          />
+          <AmountCard
+            amount="2500"
+            icon="lightning-bolt"
+            selected={selectedAmount === "2500"}
+            onPress={() => setSelectedAmount("2500")}
+          />
+
+          <Pressable
+            onPress={() => setSelectedAmount("Custom")}
+            className="mb-4 w-[48%]"
+          >
+            <LinearGradient
+              colors={
+                selectedAmount === "Custom"
+                  ? ["#FF5F54", "#FF3B30"]
+                  : ["#1A1A1E", "#0F0F12"]
+              }
+              className={`h-40 items-center justify-center rounded-[35px] border p-6 ${
+                selectedAmount === "Custom"
+                  ? "border-transparent"
+                  : "border-white/10"
+              }`}
+            >
+              <MaterialCommunityIcons
+                name="pencil-plus"
+                size={32}
+                color={selectedAmount === "Custom" ? "white" : "#FF3B30"}
+              />
+              <Text
+                className={`mt-2 text-xs font-black uppercase ${
+                  selectedAmount === "Custom" ? "text-white" : "text-white/50"
+                }`}
+              >
+                Custom
+              </Text>
+            </LinearGradient>
+          </Pressable>
+        </View>
+
+        {selectedAmount === "Custom" && (
+          <View className="mt-4 rounded-3xl border border-red-500/30 bg-white/5 p-6">
+            <Text className="mb-2 text-center text-[10px] font-bold uppercase text-white/40">
+              Enter Custom Amount
+            </Text>
             <TextInput
+              placeholder="0.00"
+              placeholderTextColor="rgba(255,255,255,0.1)"
+              keyboardType="numeric"
               value={customAmount}
               onChangeText={setCustomAmount}
-              placeholder="Enter amount"
-              placeholderTextColor="#ffffff40"
-              keyboardType="numeric"
-              className="flex-1 text-white text-base"
+              className="text-center text-3xl font-black text-white"
+              autoFocus
             />
-          )}
-        </Pressable>
+          </View>
+        )}
 
-        {/* Payment Methods Section */}
-        <Text className="text-white font-bold tracking-[3px] mb-6 text-sm uppercase">Payment Methods</Text>
-        <PaymentMethod
-          title="Credit/Debit Card"
-          sub="Visa, MasterCard, American Express"
-          icon="credit-card-outline"
-          onPress={() => handlePaymentMethodSelect('Credit/Debit Card')}
-        />
-        <PaymentMethod
-          title="Bank Transfer"
-          sub="Direct bank transfer or online banking"
-          icon="bank-outline"
-          onPress={() => handlePaymentMethodSelect('Bank Transfer')}
-        />
-        <PaymentMethod
-          title="Digital Wallet"
-          sub="eZ Cash, mCash, PayHere, Frimi"
-          icon="cellphone-check"
-          onPress={() => handlePaymentMethodSelect('Digital Wallet')}
-        />
-
-        {/* Proceed Button */}
-        <Pressable onPress={handleProceedToPayment} className="mt-6 mb-10">
+        <Pressable
+          onPress={handleTopUp}
+          disabled={loading}
+          className="mt-10 h-16 overflow-hidden rounded-full shadow-lg shadow-red-500/20"
+        >
           <LinearGradient
-            colors={['#2D2D35', '#1A1A1E']}
-            className="h-16 rounded-full items-center justify-center flex-row border border-white/10"
+            colors={["#FF5F54", "#FF3B30"]}
+            className="flex-1 items-center justify-center"
           >
-            <MaterialCommunityIcons name="shield-check-outline" size={20} color="#FF3B30" className="mr-2" />
-            <Text className="text-white font-black tracking-[4px] uppercase text-sm">Proceed to Payment</Text>
+            {loading ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Text className="text-sm font-black uppercase tracking-[4px] text-white">
+                Confirm Top-Up
+              </Text>
+            )}
           </LinearGradient>
         </Pressable>
       </ScrollView>
+
+      <View className="absolute bottom-10 flex-row items-center self-center opacity-30">
+        <MaterialCommunityIcons name="shield-check" size={14} color="white" />
+        <Text className="ml-2 text-[9px] font-bold uppercase tracking-[2px] text-white">
+          Secure Encrypted Transaction
+        </Text>
+      </View>
     </View>
   );
 };
